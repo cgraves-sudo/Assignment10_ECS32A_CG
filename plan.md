@@ -1,4 +1,4 @@
-## API Setup Does my repository work?
+## API Setup Will my repository work?
 Your app must use the Hugging Face Inference Router, which is compatible with the OpenAI chat completions format.
 
 Endpoint: https://router.huggingface.co/v1/chat/completions
