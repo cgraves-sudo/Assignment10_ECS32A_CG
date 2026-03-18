@@ -22,14 +22,10 @@ Success criteria (Part A): Running streamlit run app.py with a valid .streamlit/
 
 ## Part B: Multi-Turn Conversation UI (30 points)
 Requirements:
-
-Extend Part A to replace the hardcoded test message with a real input interface.
-Use native Streamlit chat UI elements. Render messages with st.chat_message(...) and collect user input with st.chat_input(...).
-Add a fixed input bar at the bottom of the main area.
 Store the full conversation history in st.session_state. After each exchange, append both the user message and the assistant response to the history.
-SEND THE FULL MESSAGE HISTORY with each API request so the model maintains context.
-Render the conversation history above the input bar using default Streamlit UI elements rather than CSS-based custom chat bubbles.
-Success criteria (Part B): Sending multiple messages in a row produces context-aware replies (e.g. the model remembers the user’s name from an earlier message). Messages are displayed with correct styling and the input bar remains fixed.
+Success criteria (Part B): 
+Sending multiple messages in a row produces context-aware replies (e.g. the model remembers the user’s name from an earlier message)
+Messages are displayed with correct styling and the input bar remains fixed.
 
 ## Part C: Chat Management (25 points)
 Requirements:

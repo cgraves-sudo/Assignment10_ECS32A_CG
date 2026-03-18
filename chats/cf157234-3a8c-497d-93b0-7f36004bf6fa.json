@@ -1,0 +1,15 @@
+{
+  "id": "cf157234-3a8c-497d-93b0-7f36004bf6fa",
+  "title": "This is great",
+  "created_at": "2026-03-18T12:18:29.318990",
+  "messages": [
+    {
+      "role": "user",
+      "content": "This is great"
+    },
+    {
+      "role": "assistant",
+      "content": "Echo: This is great"
+    }
+  ]
+}
