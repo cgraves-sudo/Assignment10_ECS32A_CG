@@ -1,2 +1,26 @@
 streamlit
 requests
+
+#api call
+hf_token = st.secrets.get("HF_TOKEN", "")
+if not hf_token:
+    st.error("Missing HF_TOKEN in Streamlit secrets.")
+    st.stop()
+
+headers = {"Authorization": f"Bearer {hf_token}"}
+payload = {
+    "model": "meta-llama/Llama-3.2-1B-Instruct",
+    "messages": [{"role": "user", "content": user_input}],
+    "max_tokens": 512
+}
+response = requests.post(
+    "https://router.huggingface.co/v1/chat/completions",
+    headers=headers, json=payload
+)
+
+# API Connection Verification
+if response.status_code == 200:
+    print("Response received successfully!")
+else:
+    print(f"Error: {response.status_code}")
+    print(response.text)
