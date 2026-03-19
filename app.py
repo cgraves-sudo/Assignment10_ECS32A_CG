@@ -386,7 +386,7 @@ with st.container(height=700):
 
     if prompt:
         user_message = {"role": "user", "content": prompt}
-        generated_title = None
+        #generated_title = None
 
         conversation_history = active_chat["messages"] + [user_message]
         payload_messages = []
