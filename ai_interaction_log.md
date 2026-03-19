@@ -1,8 +1,3 @@
-### Task: [Task Name]
-**Prompt:** "[Paste your prompt here or summarize if too long]"
-**AI Suggestion:** [Brief summary of what the AI suggested]
-**My Modifications & Reflections:** [Did the code work? Did you adapt anything to fit the assignment?]
-
 ### Task: [Set Up & Troubleshooting]
 **Prompt:** (Summary, 3 Prompts) Request assistance to ensure token is hidden on Repository, Handling error messages from token retrieval from secrets.toml. Later prompted assistance in updating repository in VS.
 **AI Suggestion:** Reconfigure terminal environment, suggests code to output an error message in the event of a missing API token. Github & terminal troubleshooting 
@@ -40,12 +35,8 @@ Minor error in the Sidebar, reiterate the code logic to me, because in the rows 
 **AI Suggestion:** Suggests iteration over data lines for UI rendering. Subsequent appends to accumulator string for object saving. Breaks, time.sleep(0.03) between chunks. Recommends title name to be saved to JSON for reopening.
 **My Modifications & Reflections:** Reflections: Verified real time chunks are outputted, non-streaming path present only for title generation. Bug causing chat output outside of container as well as Sidebar title deletion, addressed.
 
-### Task: [3 - User Memory]
-**Prompt:** 
-**AI Suggestion:** 
-**My Modifications & Reflections:** 
 
-### Task: []
-**Prompt:** 
-**AI Suggestion:** 
-**My Modifications & Reflections:** 
+### Task: [3 - User Memory]
+**Prompt:** "I have repurposed the title_payload function to generate a custom payload, here specifically, 'extract user's personality trait preferences'according to the memory.json categories. The api call iterates through each category the API response should give a one word response inferring the user's preference, based on user inputted prompt and then (store it as a value to the category key). The display button "Clear Memory" incorporate a native Streamlit control to clear/reset the saved memory. Ultimately, the json should be injected into the sytem prompt of future conversations, so that the model can personalize responses. Lastly, recent chats Titles keep deleting, please adjust the logic so they have persistence once generated"
+**AI Suggestion:** Incorporates load_memory and clear_memory functions, Reviews build_special_payload def opts to separate functions, Recommends merge behavior overwrite only categories with meaningful non-empty one-word values. Model instructed to return valid JSON only
+**My Modifications & Reflections:** Initial testing only adjusted memory.json upon explicit use of key words after a cleared memory. Modified API call wording for more prediction freedom.

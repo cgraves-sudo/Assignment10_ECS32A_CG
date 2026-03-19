@@ -7,8 +7,8 @@ from pathlib import Path
 import requests
 import streamlit as st
 
-json_data = {"name": "John Test", "age": 30}
 CHAT_DIRECTORY = Path("chats")
+MEMORY_FILE = Path("memory.json")
 CHAT_COMPLETIONS_URL = "https://router.huggingface.co/v1/chat/completions"
 MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
 
@@ -42,7 +42,7 @@ def chat_file_path(chat_id):
 
 
 def save_chat(chat):
-    """Persist only the JSON-backed chat fields."""
+    """Persist chat fields to JSON."""
     CHAT_DIRECTORY.mkdir(exist_ok=True)
     persisted_chat = {
         "id": chat["id"],
@@ -77,6 +77,51 @@ def load_saved_chats():
         chats[chat["id"]] = chat
 
     return chats
+
+
+def load_memory():
+    """Load persisted user memory from disk."""
+    if not MEMORY_FILE.exists():
+        return {}
+
+    try:
+        memory = json.loads(MEMORY_FILE.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+    return memory if isinstance(memory, dict) else {}
+
+
+def save_memory(memory_data):
+    """Persist user memory as a JSON object."""
+    MEMORY_FILE.write_text(json.dumps(memory_data, indent=2), encoding="utf-8")
+
+
+def clear_memory():
+    """Reset both session and file-backed memory while keeping the schema keys."""
+    cleared_memory = {key: "" for key in st.session_state.memory.keys()}
+    st.session_state.memory = cleared_memory
+    save_memory(cleared_memory)
+
+
+def ensure_memory_state():
+    if "memory" not in st.session_state:
+        st.session_state.memory = load_memory()
+
+
+def merge_memory(existing_memory, new_memory):
+    """Merge extracted one-word values into the existing schema."""
+    if not isinstance(new_memory, dict):
+        return existing_memory
+
+    merged_memory = existing_memory.copy()
+    for key in merged_memory.keys():
+        value = new_memory.get(key, "")
+        if isinstance(value, str):
+            cleaned_value = value.strip().strip('"').strip("'")
+            if cleaned_value:
+                merged_memory[key] = cleaned_value
+    return merged_memory
 
 
 def create_new_chat():
@@ -147,7 +192,8 @@ def should_generate_interface_title(chat):
     return chat.get("title", "New Chat") == "New Chat" and len(chat["messages"]) == 0
 
 
-def extract_message_content(response_json):    #Used for extracting the title from the non-streaming API response
+def extract_message_content(response_json):
+    """Extract content from a standard non-streaming chat-completions response."""
     return response_json["choices"][0]["message"]["content"].strip()
 
 
@@ -188,7 +234,6 @@ def stream_assistant_response(response):
 
 
 def build_title_payload(user_message):
-    """Ask the model for a short title-only label for the sidebar."""
     return {
         "model": MODEL_NAME,
         "messages": [
@@ -208,6 +253,62 @@ def build_title_payload(user_message):
     }
 
 
+def build_memory_payload(user_message, memory_schema):
+    categories = ", ".join(memory_schema.keys())
+    return {
+        "model": MODEL_NAME,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "Return a valid JSON object only. "
+                    f"Use exactly these keys: {categories}. "
+                    "For each key, infer a one-word user preference or trait from the message. "
+                    'If the message does not provide any suggestion for a category, return an empty string "". '
+                    "Do not add extra keys. Do not include explanation."
+                ),
+            },
+            {
+                "role": "user",
+                "content": user_message["content"],
+            },
+        ],
+        "max_tokens": 150,
+    }
+
+
+def build_memory_system_message(memory_data):
+    if not memory_data:
+        return None
+
+    filled_memory = {key: value for key, value in memory_data.items() if value not in ("", None, [], {})}
+    if not filled_memory:
+        return None
+
+    return {
+        "role": "system",
+        "content": (
+            "Use the following stored user memory to personalize tone and responses when relevant. "
+            "Do not mention the memory explicitly unless it naturally helps the response.\n"
+            f"User memory: {json.dumps(filled_memory)}"
+        ),
+    }
+
+
+def parse_memory_response(response_json, memory_schema):
+    """Parse the extracted memory response into the expected schema keys only."""
+    memory_text = extract_message_content(response_json)
+    parsed_memory = json.loads(memory_text)
+    if not isinstance(parsed_memory, dict):
+        return {}
+
+    filtered_memory = {}
+    for key in memory_schema.keys():
+        value = parsed_memory.get(key, "")
+        filtered_memory[key] = value if isinstance(value, str) else ""
+    return filtered_memory
+
+
 def recent_chat_row(chat):
     """Render one recent-chat row with open and delete controls."""
     is_active = chat["id"] == st.session_state.active_chat_id
@@ -215,7 +316,7 @@ def recent_chat_row(chat):
 
     title_column, date_column, delete_column = st.columns([4, 2, 1], gap="small")
     timestamp = format_timestamp(chat["created_at"])
-    button_type = "primary" if is_active else "secondary"
+    button_type = "secondary" if is_active else "tertiary"
 
     with title_column:
         if st.button(
@@ -237,11 +338,13 @@ def recent_chat_row(chat):
 
 
 ensure_chat_state()
+ensure_memory_state()
 active_chat = st.session_state.chats[st.session_state.active_chat_id]
 hf_token = st.secrets.get("HF_TOKEN", "")
 if not hf_token:
     st.error("Missing HF_TOKEN in Streamlit secrets.")
     st.stop()
+
 headers = {
     "Authorization": f"Bearer {hf_token}",
     "Content-Type": "application/json",
@@ -256,11 +359,11 @@ with st.sidebar:
         st.rerun()
 
     with st.expander("User Memory"):
-        st.button("Clear Memory", use_container_width=True, type="primary")
-        st.write("This is where user memory will be displayed.")
-        for key, value in json_data.items():
-            with st.popover(f"{key}"):
-                st.write(value)
+        if st.button("Clear Memory", use_container_width=True, type="primary"):
+            clear_memory()
+            st.rerun()
+
+        st.json(st.session_state.memory)
 
     st.write("")
     st.divider()
@@ -276,19 +379,25 @@ with st.sidebar:
 
 prompt = st.chat_input("Type a message and press Enter")
 
-
 with st.container(height=700):
     for message in active_chat["messages"]:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
+
     if prompt:
         user_message = {"role": "user", "content": prompt}
         generated_title = None
-        # Contextual API call
+
         conversation_history = active_chat["messages"] + [user_message]
+        payload_messages = []
+        memory_system_message = build_memory_system_message(st.session_state.memory)
+        if memory_system_message:
+            payload_messages.append(memory_system_message)
+        payload_messages.extend(conversation_history)
+
         payload = {
             "model": MODEL_NAME,
-            "messages": conversation_history,
+            "messages": payload_messages,
             "stream": True,
             "max_tokens": 512,
         }
@@ -307,12 +416,12 @@ with st.container(height=700):
             st.stop()
 
         if should_generate_interface_title(active_chat):
-            payload2 = build_title_payload(user_message)
+            title_payload = build_title_payload(user_message)
             try:
                 retrieve = requests.post(
                     CHAT_COMPLETIONS_URL,
                     headers=headers,
-                    json=payload2,
+                    json=title_payload,
                     timeout=30,
                 )
                 retrieve.raise_for_status()
@@ -336,4 +445,24 @@ with st.container(height=700):
         active_chat["messages"].append({"role": "assistant", "content": assistant_message})
         update_chat_title(active_chat["id"], generated_title)
         save_chat(active_chat)
+
+        if st.session_state.memory:
+            memory_payload = build_memory_payload(user_message, st.session_state.memory)
+            try:
+                memory_response = requests.post(
+                    CHAT_COMPLETIONS_URL,
+                    headers=headers,
+                    json=memory_payload,
+                    timeout=30,
+                )
+                memory_response.raise_for_status()
+                memory_response_json = memory_response.json()
+                extracted_memory = parse_memory_response(memory_response_json, st.session_state.memory)
+                st.session_state.memory = merge_memory(st.session_state.memory, extracted_memory)
+                save_memory(st.session_state.memory)
+            except requests.exceptions.RequestException:
+                pass
+            except (ValueError, KeyError, IndexError, TypeError, json.JSONDecodeError):
+                pass
+
         st.rerun()
