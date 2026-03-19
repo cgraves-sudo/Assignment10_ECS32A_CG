@@ -36,9 +36,9 @@ Minor error in the Sidebar, reiterate the code logic to me, because in the rows 
 
 
 ### Task: [2 - Response Streaming]
-**Prompt:** "Great, i would like real time token by token streaming. 
-**AI Suggestion:** 
-**My Modifications & Reflections:** 
+**Prompt:** (2 Prompts)"Now, real time token by token streaming. In the primary call, I have inputted two new functions to achieve this. This may affect prior parsing logic (extract_message_content function). Further how to incorporate a short delay between rendering chunks so this effect is visible in the UI?" "The title is being erased after each run. My attempted fix has this error message on the UI *Inserted Error Message*, continual conversations need to be saved to JSON"
+**AI Suggestion:** Suggests iteration over data lines for UI rendering. Subsequent appends to accumulator string for object saving. Breaks, time.sleep(0.03) between chunks. Recommends title name to be saved to JSON for reopening.
+**My Modifications & Reflections:** Reflections: Verified real time chunks are outputted, non-streaming path present only for title generation. Bug causing chat output outside of container as well as Sidebar title deletion, addressed.
 
 ### Task: [3 - User Memory]
 **Prompt:** 

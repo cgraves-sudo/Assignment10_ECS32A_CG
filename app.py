@@ -1,5 +1,6 @@
 import datetime
 import json
+import time
 import uuid
 from pathlib import Path
 
@@ -127,7 +128,7 @@ def delete_chat(chat_id):
 
 
 def update_chat_title(chat_id, generated_title):
-    """Update the in-memory sidebar label only; do not persist it to disk."""
+    """Update both the UI label and persisted chat title."""
     chat = st.session_state.chats.get(chat_id)
     if not chat:
         return
@@ -136,16 +137,54 @@ def update_chat_title(chat_id, generated_title):
     if not cleaned_title:
         return
 
-    chat["display_title"] = cleaned_title[:30] + ("..." if len(cleaned_title) > 30 else "")
+    final_title = cleaned_title[:30] + ("..." if len(cleaned_title) > 30 else "")
+    chat["title"] = final_title
+    chat["display_title"] = final_title
 
 
 def should_generate_interface_title(chat):
     """Generate a title once, only for a newly started chat."""
-    return chat.get("display_title", "New Chat") == "New Chat" and len(chat["messages"]) == 0
+    return chat.get("title", "New Chat") == "New Chat" and len(chat["messages"]) == 0
 
 
-def extract_message_content(response_json):
+def extract_message_content(response_json):    #Used for extracting the title from the non-streaming API response
     return response_json["choices"][0]["message"]["content"].strip()
+
+
+def extract_stream_delta(chunk_json):
+    """Extract incremental text content from a streamed chunk."""
+    choices = chunk_json.get("choices", [])
+    if not choices:
+        return ""
+
+    delta = choices[0].get("delta", {})
+    content = delta.get("content", "")
+    return content if isinstance(content, str) else ""
+
+
+def stream_assistant_response(response):
+    """Yield streamed assistant chunks from SSE data lines."""
+    for raw_line in response.iter_lines(decode_unicode=True):
+        if not raw_line:
+            continue
+
+        line = raw_line.strip()
+        if not line.startswith("data:"):
+            continue
+
+        data = line[5:].strip()
+        if not data or data == "[DONE]":
+            continue
+
+        try:
+            chunk_json = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+
+        content = extract_stream_delta(chunk_json)
+        if content:
+            yield content
+            time.sleep(0.03)
 
 
 def build_title_payload(user_message):
@@ -199,6 +238,14 @@ def recent_chat_row(chat):
 
 ensure_chat_state()
 active_chat = st.session_state.chats[st.session_state.active_chat_id]
+hf_token = st.secrets.get("HF_TOKEN", "")
+if not hf_token:
+    st.error("Missing HF_TOKEN in Streamlit secrets.")
+    st.stop()
+headers = {
+    "Authorization": f"Bearer {hf_token}",
+    "Content-Type": "application/json",
+}
 
 st.title("My AI Chat")
 
@@ -227,69 +274,66 @@ with st.sidebar:
     for chat in chats_sorted:
         recent_chat_row(chat)
 
-with st.container(height=500):
+prompt = st.chat_input("Type a message and press Enter")
+
+
+with st.container(height=700):
     for message in active_chat["messages"]:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
+    if prompt:
+        user_message = {"role": "user", "content": prompt}
+        generated_title = None
+        # Contextual API call
+        conversation_history = active_chat["messages"] + [user_message]
+        payload = {
+            "model": MODEL_NAME,
+            "messages": conversation_history,
+            "stream": True,
+            "max_tokens": 512,
+        }
 
-prompt = st.chat_input("Type a message and press Enter")
-
-hf_token = st.secrets.get("HF_TOKEN", "")
-if not hf_token:
-    st.error("Missing HF_TOKEN in Streamlit secrets.")
-    st.stop()
-
-headers = {
-    "Authorization": f"Bearer {hf_token}",
-    "Content-Type": "application/json",
-}
-
-if prompt:
-    user_message = {"role": "user", "content": prompt}
-    conversation_history = active_chat["messages"] + [user_message]
-    payload = {
-        "model": MODEL_NAME,
-        "messages": conversation_history,
-        "max_tokens": 512,
-    }
-
-    try:
-        response = requests.post(
-            CHAT_COMPLETIONS_URL,
-            headers=headers,
-            json=payload,
-            timeout=30,
-        )
-        response.raise_for_status()
-        response_json = response.json()
-        assistant_message = extract_message_content(response_json)
-    except requests.exceptions.RequestException as exc:
-        st.error(f"API request failed: {exc}")
-        st.stop()
-    except (ValueError, KeyError, IndexError, TypeError):
-        st.error("The API response was not in the expected chat completion format.")
-        st.stop()
-
-    generated_title = None
-    if should_generate_interface_title(active_chat):
-        payload2 = build_title_payload(user_message)
         try:
-            retrieve = requests.post(
+            response = requests.post(
                 CHAT_COMPLETIONS_URL,
                 headers=headers,
-                json=payload2,
+                json=payload,
+                stream=True,
                 timeout=30,
             )
-            retrieve.raise_for_status()
-            retrieve_json = retrieve.json()
-            generated_title = extract_message_content(retrieve_json)
-        except requests.exceptions.RequestException:
-            generated_title = None
-        except (ValueError, KeyError, IndexError, TypeError):
-            generated_title = None
+            response.raise_for_status()
+        except requests.exceptions.RequestException as exc:
+            st.error(f"API request failed: {exc}")
+            st.stop()
 
-    active_chat["messages"].append(user_message)
-    active_chat["messages"].append({"role": "assistant", "content": assistant_message})
-    update_chat_title(active_chat["id"], generated_title)
-    save_chat(active_chat)
-    st.rerun()
+        if should_generate_interface_title(active_chat):
+            payload2 = build_title_payload(user_message)
+            try:
+                retrieve = requests.post(
+                    CHAT_COMPLETIONS_URL,
+                    headers=headers,
+                    json=payload2,
+                    timeout=30,
+                )
+                retrieve.raise_for_status()
+                retrieve_json = retrieve.json()
+                generated_title = extract_message_content(retrieve_json)
+            except requests.exceptions.RequestException:
+                generated_title = None
+            except (ValueError, KeyError, IndexError, TypeError):
+                generated_title = None
+
+        active_chat["messages"].append(user_message)
+        save_chat(active_chat)
+
+        with st.chat_message("assistant"):
+            assistant_message = st.write_stream(stream_assistant_response(response))
+
+        if not assistant_message:
+            st.error("The API response did not contain any streamed assistant content.")
+            st.stop()
+
+        active_chat["messages"].append({"role": "assistant", "content": assistant_message})
+        update_chat_title(active_chat["id"], generated_title)
+        save_chat(active_chat)
+        st.rerun()
