@@ -3,10 +3,13 @@ import json
 import uuid
 from pathlib import Path
 
+import requests
 import streamlit as st
 
 json_data = {"name": "John Test", "age": 30}
 CHAT_DIRECTORY = Path("chats")
+CHAT_COMPLETIONS_URL = "https://router.huggingface.co/v1/chat/completions"
+MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
 
 
 st.set_page_config(page_title="My AI Chat", layout="wide")
@@ -23,10 +26,11 @@ def format_timestamp(iso_timestamp):
 def build_chat(title="New Chat", messages=None, created_at=None, chat_id=None):
     """Create the standard chat object used by session state and JSON files."""
     timestamp = created_at or datetime.datetime.now().isoformat()
-    ##Here it makes a unique randomized ID for the chat_id variable, it also functions as the json file name
+    stored_title = title or "New Chat"
     return {
         "id": chat_id or str(uuid.uuid4()),
-        "title": title,
+        "title": stored_title,
+        "display_title": stored_title,
         "created_at": timestamp,
         "messages": messages or [],
     }
@@ -37,8 +41,15 @@ def chat_file_path(chat_id):
 
 
 def save_chat(chat):
+    """Persist only the JSON-backed chat fields."""
     CHAT_DIRECTORY.mkdir(exist_ok=True)
-    chat_file_path(chat["id"]).write_text(json.dumps(chat, indent=2), encoding="utf-8")
+    persisted_chat = {
+        "id": chat["id"],
+        "title": chat["title"],
+        "created_at": chat["created_at"],
+        "messages": chat["messages"],
+    }
+    chat_file_path(chat["id"]).write_text(json.dumps(persisted_chat, indent=2), encoding="utf-8")
 
 
 def delete_chat_file(chat_id):
@@ -47,8 +58,8 @@ def delete_chat_file(chat_id):
         file_path.unlink()
 
 
-def load_saved_chats(): #Chat Dictionary Container for all chats generated
-    """Load valid chat JSON files from disk."""
+def load_saved_chats():
+    """Load valid chat JSON files from disk and restore display titles for the UI."""
     chats = {}
     CHAT_DIRECTORY.mkdir(exist_ok=True)
 
@@ -61,6 +72,7 @@ def load_saved_chats(): #Chat Dictionary Container for all chats generated
         if not all(key in chat for key in ("id", "title", "created_at", "messages")):
             continue
 
+        chat["display_title"] = chat.get("title", "New Chat")
         chats[chat["id"]] = chat
 
     return chats
@@ -70,11 +82,11 @@ def create_new_chat():
     """Create, store, and activate a fresh empty chat."""
     chat = build_chat()
     st.session_state.chats[chat["id"]] = chat
-    st.session_state.active_chat_id = chat["id"] # Identity of new chat stored in session state for active view
+    st.session_state.active_chat_id = chat["id"]
     save_chat(chat)
 
 
-def ensure_chat_state(): # Verify Current Chat Line or Retrieves it -- This function checks if there are any existing chats in the session state. If not, it loads saved chats from disk. If there are still no chats after loading, it creates a new chat. It also ensures that the active chat ID is valid and points to an existing chat.
+def ensure_chat_state():
     """Initialize session state from saved chats or create a default chat."""
     if "chats" not in st.session_state:
         st.session_state.chats = load_saved_chats()
@@ -114,31 +126,57 @@ def delete_chat(chat_id):
         st.session_state.active_chat_id = next_chat_id
 
 
-def update_chat_title(chat_id): ### ADJUST THIS WHEN API INCORPORATION TO PROMPT AI TO COME UP WITH A TITLE PHRASE LESS THAN 30
-    """Use the first user message as a stable, short sidebar title."""
-    chat = st.session_state.chats[chat_id]
-    if chat["title"] != "New Chat":
+def update_chat_title(chat_id, generated_title):
+    """Update the in-memory sidebar label only; do not persist it to disk."""
+    chat = st.session_state.chats.get(chat_id)
+    if not chat:
         return
 
-    first_user_message = next(
-        (message["content"] for message in chat["messages"] if message["role"] == "user"),
-        "",
-    ).strip()
+    cleaned_title = (generated_title or "").strip().strip('"').strip("'")
+    if not cleaned_title:
+        return
 
-    if first_user_message:
-        chat["title"] = first_user_message[:30] + ("..." if len(first_user_message) > 30 else "")
+    chat["display_title"] = cleaned_title[:30] + ("..." if len(cleaned_title) > 30 else "")
+
+
+def should_generate_interface_title(chat):
+    """Generate a title once, only for a newly started chat."""
+    return chat.get("display_title", "New Chat") == "New Chat" and len(chat["messages"]) == 0
+
+
+def extract_message_content(response_json):
+    return response_json["choices"][0]["message"]["content"].strip()
+
+
+def build_title_payload(user_message):
+    """Ask the model for a short title-only label for the sidebar."""
+    return {
+        "model": MODEL_NAME,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "Generate a short chat title of 5 words or fewer. "
+                    "Return only the title, with no quotes and no explanation."
+                ),
+            },
+            {
+                "role": "user",
+                "content": user_message["content"],
+            },
+        ],
+        "max_tokens": 20,
+    }
 
 
 def recent_chat_row(chat):
     """Render one recent-chat row with open and delete controls."""
     is_active = chat["id"] == st.session_state.active_chat_id
-    title_label = chat["title"]
-    if is_active:
-        title_label = f"{title_label}"
+    title_label = chat.get("display_title", chat["title"])
 
     title_column, date_column, delete_column = st.columns([4, 2, 1], gap="small")
     timestamp = format_timestamp(chat["created_at"])
-    button_type = "secondary" if is_active else "tertiary"
+    button_type = "primary" if is_active else "secondary"
 
     with title_column:
         if st.button(
@@ -159,10 +197,8 @@ def recent_chat_row(chat):
             st.rerun()
 
 
-## Main app logic starts here:
-
 ensure_chat_state()
-active_chat = st.session_state.chats[st.session_state.active_chat_id] # List Type Container for active content
+active_chat = st.session_state.chats[st.session_state.active_chat_id]
 
 st.title("My AI Chat")
 
@@ -173,8 +209,7 @@ with st.sidebar:
         st.rerun()
 
     with st.expander("User Memory"):
-        st.button("Clear Memory", use_container_width=True,
-            type="primary")
+        st.button("Clear Memory", use_container_width=True, type="primary")
         st.write("This is where user memory will be displayed.")
         for key, value in json_data.items():
             with st.popover(f"{key}"):
@@ -197,15 +232,64 @@ with st.container(height=500):
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-##load context :: SEND THE FULL MESSAGE HISTORY with each API request so the model maintains context.
-
 prompt = st.chat_input("Type a message and press Enter")
 
-if prompt: ## History Appends and Interface
-    active_chat["messages"].append({"role": "user", "content": prompt}) # User Input Append
-    response = f"Echo: {prompt}"
-    active_chat["messages"].append({"role": "assistant", "content": response}) # Bot Output Append
+hf_token = st.secrets.get("HF_TOKEN", "")
+if not hf_token:
+    st.error("Missing HF_TOKEN in Streamlit secrets.")
+    st.stop()
 
-    update_chat_title(active_chat["id"])
-    save_chat(active_chat) # Json dump to chat file path
+headers = {
+    "Authorization": f"Bearer {hf_token}",
+    "Content-Type": "application/json",
+}
+
+if prompt:
+    user_message = {"role": "user", "content": prompt}
+    conversation_history = active_chat["messages"] + [user_message]
+    payload = {
+        "model": MODEL_NAME,
+        "messages": conversation_history,
+        "max_tokens": 512,
+    }
+
+    try:
+        response = requests.post(
+            CHAT_COMPLETIONS_URL,
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+        response.raise_for_status()
+        response_json = response.json()
+        assistant_message = extract_message_content(response_json)
+    except requests.exceptions.RequestException as exc:
+        st.error(f"API request failed: {exc}")
+        st.stop()
+    except (ValueError, KeyError, IndexError, TypeError):
+        st.error("The API response was not in the expected chat completion format.")
+        st.stop()
+
+    generated_title = None
+    if should_generate_interface_title(active_chat):
+        payload2 = build_title_payload(user_message)
+        try:
+            retrieve = requests.post(
+                CHAT_COMPLETIONS_URL,
+                headers=headers,
+                json=payload2,
+                timeout=30,
+            )
+            retrieve.raise_for_status()
+            retrieve_json = retrieve.json()
+            generated_title = extract_message_content(retrieve_json)
+        except requests.exceptions.RequestException:
+            generated_title = None
+        except (ValueError, KeyError, IndexError, TypeError):
+            generated_title = None
+
+    active_chat["messages"].append(user_message)
+    active_chat["messages"].append({"role": "assistant", "content": assistant_message})
+    update_chat_title(active_chat["id"], generated_title)
+    save_chat(active_chat)
     st.rerun()

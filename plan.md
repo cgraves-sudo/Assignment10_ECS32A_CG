@@ -1,5 +1,5 @@
 ## API Setup Will my repository work?
-Your app must use the Hugging Face Inference Router, which is compatible with the OpenAI chat completions format.
+Your app must use the ...
 
 Endpoint: https://router.huggingface.co/v1/chat/completions
 Model: meta-llama/Llama-3.2-1B-Instruct 
@@ -22,7 +22,6 @@ Success criteria (Part A): Running streamlit run app.py with a valid .streamlit/
 
 ## Part B: Multi-Turn Conversation UI (30 points)
 Requirements:
-Store the full conversation history in st.session_state. After each exchange, append both the user message and the assistant response to the history.
 Success criteria (Part B): 
 Sending multiple messages in a row produces context-aware replies (e.g. the model remembers the user’s name from an earlier message)
 Messages are displayed with correct styling and the input bar remains fixed.
@@ -42,11 +41,9 @@ Success criteria (Part C): Multiple chats can be created, switched between, and 
 Requirements:
 
 Each chat session is saved as a separate JSON file inside a chats/ directory. Each file must store at minimum: a chat ID, a title or timestamp, and the full message history.
-On app startup, all existing files in chats/ are loaded and shown in the sidebar automatically.
 Returning to a previous chat and continuing the conversation must work correctly.
-Deleting a chat (✕ button) must also delete the corresponding JSON file from chats/.
 A generated or summarized chat title is acceptable and encouraged. The title does not need to be identical to the first user message.
-Success criteria (Part D): Closing and reopening the app shows all previous chats intact in the sidebar. Continuing a loaded chat works correctly. Deleting a chat removes its file from disk.
+Success criteria (Part D): Good
 
 ## Task 2: Response Streaming (20 points)
 Goal: Display the model’s reply token-by-token as it is generated instead of waiting for the full response.

@@ -1,0 +1,39 @@
+{
+  "id": "46b2d060-f141-48df-b167-7f72d46b44dd",
+  "title": "Hello",
+  "created_at": "2026-03-18T16:54:06.029694",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello"
+    },
+    {
+      "role": "assistant",
+      "content": "Bot: {\"id\":\"chatcmpl-3b5d79b81f4747f78fdbe908ee6d9075\",\"object\":\"chat.completion\",\"created\":1773878138,\"model\":\"meta-llama/llama-3.2-1b-instruct\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Hello! How can I assist you today?\"},\"finish_reason\":\"stop\",\"content_filter_results\":{\"hate\":{\"filtered\":false},\"self_harm\":{\"filtered\":false},\"sexual\":{\"filtered\":false},\"violence\":{\"filtered\":false},\"jailbreak\":{\"filtered\":false,\"detected\":false},\"profanity\":{\"filtered\":false,\"detected\":false}}}],\"usage\":{\"prompt_tokens\":41,\"completion_tokens\":10,\"total_tokens\":51,\"prompt_tokens_details\":null,\"completion_tokens_details\":null},\"system_fingerprint\":\"\"}\n"
+    },
+    {
+      "role": "user",
+      "content": "Hello"
+    },
+    {
+      "role": "assistant",
+      "content": "Hello! How can I assist you today?"
+    },
+    {
+      "role": "user",
+      "content": "How are you?"
+    },
+    {
+      "role": "assistant",
+      "content": "I'm doing well, thanks for asking. How about you?"
+    },
+    {
+      "role": "user",
+      "content": "Did I say Hello earlier"
+    },
+    {
+      "role": "assistant",
+      "content": "You said \"Hello\" earlier, and then \"Hello\" again."
+    }
+  ]
+}
