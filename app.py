@@ -264,7 +264,7 @@ def build_memory_payload(user_message, memory_schema):
                     "Return a valid JSON object only. "
                     f"Use exactly these keys: {categories}. "
                     "For each key, infer a one-word user preference or trait from the message. "
-                    'If the message does not provide any suggestion for a category, return an empty string "". '
+                    'If the message does not demonstrate an opinion for a category, return an empty string "". '
                     "Do not add extra keys. Do not include explanation."
                 ),
             },
@@ -359,9 +359,9 @@ with st.sidebar:
         st.rerun()
 
     with st.expander("User Memory"):
-        if st.button("Clear Memory", use_container_width=True, type="primary"):
-            clear_memory()
-            st.rerun()
+        with st.container() as reserved_space:
+            if st.button("Clear Memory", use_container_width=True, type="primary"):
+                clear_memory()
 
         st.json(st.session_state.memory)
 
@@ -386,7 +386,7 @@ with st.container(height=700):
 
     if prompt:
         user_message = {"role": "user", "content": prompt}
-        #generated_title = None
+        generated_title = None
 
         conversation_history = active_chat["messages"] + [user_message]
         payload_messages = []
@@ -459,6 +459,7 @@ with st.container(height=700):
                 memory_response_json = memory_response.json()
                 extracted_memory = parse_memory_response(memory_response_json, st.session_state.memory)
                 st.session_state.memory = merge_memory(st.session_state.memory, extracted_memory)
+                reserved_space.json(st.session_state.memory)
                 save_memory(st.session_state.memory)
             except requests.exceptions.RequestException:
                 pass
