@@ -465,5 +465,3 @@ with st.container(height=700):
                 pass
             except (ValueError, KeyError, IndexError, TypeError, json.JSONDecodeError):
                 pass
-
-    st.rerun()
